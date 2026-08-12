@@ -68,6 +68,18 @@ agrupa los caracteres inválidos contiguos en un único error para no repetir el
 mismo mensaje. El descarte siempre avanza al menos un carácter, por lo que no
 hay riesgo de ciclo infinito.
 
+## Interfaz gráfica
+
+Para seleccionar un archivo `.cps`, analizarlo y visualizar los tokens, los
+errores y el árbol sintáctico, corre la interfaz con Streamlit:
+
+```bash
+streamlit run app.py
+```
+
+La interfaz ejecuta los analizadores léxico y sintáctico (vía `analisis.py`)
+y junta sus errores en un solo listado.
+
 ## Regenerar desde la gramática
 
 Solo hace falta si se modifica `Compiscript.g4`; los archivos de `generated/`

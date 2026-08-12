@@ -82,6 +82,16 @@ Para evitar mensajes repetidos en cascada cuando ANTLR reintenta varias veces
 en el mismo punto, el colector ignora un error si tiene exactamente la misma
 línea, columna y símbolo que el anterior.
 
+## Interfaz gráfica
+
+La interfaz con Streamlit (`app.py`) selecciona un archivo `.cps` o acepta
+código pegado, ejecuta el análisis léxico y sintáctico, y muestra los errores
+de ambos tipos en una sola tabla, además de los tokens y el árbol sintáctico.
+
+```bash
+streamlit run app.py
+```
+
 ## Regenerar desde la gramática
 
 Solo hace falta si se modifica `Compiscript.g4`; los archivos de `generated/`
