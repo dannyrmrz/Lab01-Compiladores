@@ -70,15 +70,18 @@ hay riesgo de ciclo infinito.
 
 ## Interfaz gráfica
 
-Para seleccionar un archivo `.cps`, analizarlo y visualizar los tokens, los
-errores y el árbol sintáctico, corre la interfaz con Streamlit:
+La interfaz con Streamlit tiene aspecto de editor de código (tema oscuro) y
+organiza los resultados en pestañas. Permite abrir un archivo `.cps`, cargar
+uno de los ejemplos de `ejemplos/` o escribir código directamente:
 
 ```bash
 streamlit run app.py
 ```
 
 La interfaz ejecuta los analizadores léxico y sintáctico (vía `analisis.py`)
-y junta sus errores en un solo listado.
+y junta sus errores en un solo listado. Las pestañas muestran el editor, los
+errores, los tokens y el árbol sintáctico, y una barra de estado indica si el
+archivo es válido o tiene errores.
 
 ## Regenerar desde la gramática
 

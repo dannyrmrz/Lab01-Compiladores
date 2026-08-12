@@ -1,34 +1,89 @@
 """Interfaz gráfica de Compiscript con Streamlit.
 
-Permite seleccionar un archivo .cps o escribir código directamente, ejecutar
-el análisis léxico y sintáctico, y visualizar los errores, los tokens y el
-árbol sintáctico.
+Presenta el análisis léxico y sintáctico con aspecto de editor de código:
+permite abrir un archivo .cps, cargar uno de los ejemplos o escribir código
+directamente, y organiza los resultados en pestañas.
 
 Uso:
     streamlit run app.py
 """
 
+import html
+from pathlib import Path
+
 import streamlit as st
 
 from analisis import MENSAJE_EXITO, FilaError, ResultadoAnalisis, analizar_codigo
+from arbol import figura_arbol
 from lexico import Token
+
+CARPETA_EJEMPLOS = Path(__file__).resolve().parent / "ejemplos"
 
 st.set_page_config(page_title="Compiscript — Analizador", page_icon="🔤", layout="wide")
 
-st.title("Compiscript")
-st.caption(
-    "Analizador léxico y sintáctico del lenguaje Compiscript. "
-    "Carga un archivo .cps o escribe tu código para detectar errores."
-)
 
+def _inyectar_css() -> None:
+    """Estilo de editor de código (tema oscuro tipo VSCode)."""
+    st.markdown(
+        """
+        <style>
+        /* Editor: textarea con aspecto de editor de código */
+        [data-testid="stTextArea"] {
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        [data-testid="stTextArea"] textarea {
+            background-color: #1E1E1E;
+            color: #D4D4D4;
+            font-family: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            border: 1px solid #3C3C3C;
+            border-radius: 6px;
+            caret-color: #569CD6;
+        }
+        [data-testid="stTextArea"] textarea:focus {
+            border-color: #569CD6;
+            box-shadow: 0 0 0 1px #569CD6;
+        }
 
-def _leer_archivo(uploaded) -> tuple[str, str | None, str | None]:
-    """Decodifica el archivo subido y devuelve (nombre, contenido, error)."""
-    try:
-        codigo = uploaded.getvalue().decode("utf-8")
-    except UnicodeDecodeError:
-        return uploaded.name, None, "El archivo no se pudo leer como texto UTF-8."
-    return uploaded.name, codigo, None
+        /* Pestañas */
+        [data-testid="stTabs"] button p {
+            font-weight: 600;
+        }
+        [data-testid="stTabs"] button[aria-selected="true"] p {
+            color: #569CD6;
+        }
+
+        /* Barra de estado del archivo */
+        .barra-archivo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0 12px 0;
+        }
+        .chip-archivo {
+            font-family: "SF Mono", Menlo, Consolas, monospace;
+            font-size: 13px;
+            color: #E6E6E6;
+            background-color: #2D2D2D;
+            border: 1px solid #3C3C3C;
+            border-radius: 4px;
+            padding: 3px 10px;
+        }
+        .chip-estado {
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 12px;
+            padding: 3px 12px;
+        }
+        .chip-estado.sin-analizar { background-color: #3C3C3C; color: #CCCCCC; }
+        .chip-estado.valido      { background-color: #2A5A2A; color: #8FE388; }
+        .chip-estado.con-errores { background-color: #5A2A2A; color: #FF9E9E; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _tabla_de_tokens(tokens: list[Token]):
@@ -53,11 +108,107 @@ def _tabla_de_errores(errores: list[FilaError]):
     ]
 
 
-def _mostrar_resultado(resultado: ResultadoAnalisis, codigo: str) -> None:
-    st.divider()
-    st.subheader("Resultado del análisis")
-
+def _estado_badge(resultado: ResultadoAnalisis | None, codigo: str) -> tuple[str, str]:
+    """Devuelve (clase css, texto) del estado actual del archivo."""
+    if resultado is None:
+        return "sin-analizar", "Sin analizar"
+    if codigo != st.session_state.get("analizado"):
+        return "sin-analizar", "Sin analizar (cambios)"
     if resultado.es_valido:
+        return "valido", "Válido"
+    return "con-errores", f"Con errores ({len(resultado.errores)})"
+
+
+def _mostrar_barra_estado(nombre: str, resultado: ResultadoAnalisis | None, codigo: str) -> None:
+    clase, texto = _estado_badge(resultado, codigo)
+    st.markdown(
+        f'<div class="barra-archivo">'
+        f'<span class="chip-archivo">{html.escape(nombre)}</span>'
+        f'<span class="chip-estado {clase}">{texto}</span>'
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
+_inyectar_css()
+
+# Estado de la sesión: el código nunca se pierde al cambiar de pestaña.
+st.session_state.setdefault("codigo", "")
+st.session_state.setdefault("nombre", "Nuevo archivo")
+st.session_state.setdefault("resultado", None)
+st.session_state.setdefault("analizado", None)
+
+
+with st.sidebar:
+    st.header("Compiscript")
+    st.caption("Analizador léxico y sintáctico")
+
+    subido = st.file_uploader("Abrir archivo .cps", type=["cps"])
+    if subido is not None:
+        try:
+            contenido = subido.getvalue().decode("utf-8")
+        except UnicodeDecodeError:
+            st.error("El archivo no se pudo leer como texto UTF-8.")
+        else:
+            st.session_state["codigo"] = contenido
+            st.session_state["nombre"] = subido.name
+            st.session_state["resultado"] = None
+            st.session_state["analizado"] = None
+
+    ejemplos = sorted(p.name for p in CARPETA_EJEMPLOS.glob("*.cps"))
+    ejemplo = st.selectbox(
+        "Cargar ejemplo",
+        ejemplos,
+        index=None,
+        placeholder="Elige un archivo de ejemplo…",
+    )
+    if st.button("Cargar ejemplo", width="stretch") and ejemplo:
+        contenido = (CARPETA_EJEMPLOS / ejemplo).read_text(encoding="utf-8")
+        st.session_state["codigo"] = contenido
+        st.session_state["nombre"] = ejemplo
+        st.session_state["resultado"] = None
+        st.session_state["analizado"] = None
+
+    st.divider()
+
+    if st.button("Analizar", type="primary", width="stretch"):
+        codigo = st.session_state["codigo"]
+        if not codigo.strip():
+            st.warning("Escribe algún código Compiscript o carga un archivo .cps.")
+        else:
+            st.session_state["resultado"] = analizar_codigo(st.session_state["nombre"], codigo)
+            st.session_state["analizado"] = codigo
+
+    if st.button("Limpiar", width="stretch"):
+        st.session_state["codigo"] = ""
+        st.session_state["nombre"] = "Nuevo archivo"
+        st.session_state["resultado"] = None
+        st.session_state["analizado"] = None
+
+
+codigo = st.session_state["codigo"]
+nombre = st.session_state["nombre"]
+resultado = st.session_state["resultado"]
+
+_mostrar_barra_estado(nombre, resultado, codigo)
+
+tab_editor, tab_errores, tab_tokens, tab_arbol = st.tabs(
+    ["Editor", "Errores", "Tokens", "Árbol"]
+)
+
+with tab_editor:
+    st.text_area(
+        "Código Compiscript",
+        key="codigo",
+        height=430,
+        label_visibility="collapsed",
+        placeholder='Ej.: let saludo: string = "hola";\nprint(saludo);',
+    )
+
+with tab_errores:
+    if resultado is None:
+        st.info("Pulsa «Analizar» en la barra lateral para revisar el código.")
+    elif resultado.es_valido:
         st.success(MENSAJE_EXITO)
     else:
         st.error(
@@ -70,56 +221,24 @@ def _mostrar_resultado(resultado: ResultadoAnalisis, codigo: str) -> None:
             hide_index=True,
         )
 
-    with st.expander("Código analizado"):
-        st.code(codigo, language="text")
-
-    with st.expander(f"Tokens reconocidos ({len(resultado.tokens)})"):
-        if resultado.tokens:
-            st.dataframe(
-                _tabla_de_tokens(resultado.tokens),
-                width="stretch",
-                hide_index=True,
-            )
-        else:
-            st.write("No se reconoció ningún token.")
-
-    with st.expander("Árbol sintáctico"):
-        if resultado.arbol:
-            st.code(resultado.arbol, language="text")
-        else:
-            st.write("No se pudo construir el árbol sintáctico.")
-
-
-fuente = st.radio(
-    "Fuente del código",
-    ["Subir archivo .cps", "Escribir / pegar código"],
-    horizontal=True,
-)
-
-nombre: str | None = None
-codigo: str | None = None
-mensaje_de_entrada: str | None = None
-
-if fuente == "Subir archivo .cps":
-    subido = st.file_uploader("Seleccionar archivo .cps", type=["cps"])
-    if subido is not None:
-        nombre, codigo, mensaje_de_entrada = _leer_archivo(subido)
-else:
-    codigo = st.text_area(
-        "Escribe o pega aquí tu código Compiscript",
-        height=250,
-        placeholder="Ej.: let saludo: string = \"hola\";\nprint(saludo);",
-    )
-    nombre = "Código escrito"
-
-if st.button("Analizar", type="primary"):
-    if mensaje_de_entrada:
-        st.error(mensaje_de_entrada)
-    elif not codigo or not codigo.strip():
-        st.warning("Escribe algún código Compiscript o selecciona un archivo .cps.")
+with tab_tokens:
+    if resultado is None:
+        st.info("Pulsa «Analizar» para generar la tabla de tokens.")
+    elif resultado.tokens:
+        st.dataframe(
+            _tabla_de_tokens(resultado.tokens),
+            width="stretch",
+            hide_index=True,
+        )
     else:
-        st.session_state["resultado"] = analizar_codigo(nombre or "Sin nombre", codigo)
-        st.session_state["codigo"] = codigo
+        st.write("No se reconoció ningún token.")
 
-if "resultado" in st.session_state:
-    _mostrar_resultado(st.session_state["resultado"], st.session_state["codigo"])
+with tab_arbol:
+    if resultado is None:
+        st.info("Pulsa «Analizar» para construir el árbol sintáctico.")
+    elif resultado.arbol_estructura:
+        st.pyplot(figura_arbol(resultado.arbol_estructura), width="stretch")
+        with st.expander("Ver el árbol como texto"):
+            st.code(resultado.arbol, language="text")
+    else:
+        st.write("No se pudo construir el árbol sintáctico.")

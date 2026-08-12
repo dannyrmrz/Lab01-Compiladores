@@ -84,9 +84,13 @@ línea, columna y símbolo que el anterior.
 
 ## Interfaz gráfica
 
-La interfaz con Streamlit (`app.py`) selecciona un archivo `.cps` o acepta
-código pegado, ejecuta el análisis léxico y sintáctico, y muestra los errores
-de ambos tipos en una sola tabla, además de los tokens y el árbol sintáctico.
+La interfaz con Streamlit (`app.py`) tiene aspecto de editor de código y
+organiza los resultados en pestañas: editor, errores, tokens y árbol. Acepta
+un archivo `.cps`, un ejemplo de `ejemplos/` o código pegado; ejecuta el
+análisis léxico y sintáctico, y muestra los errores de ambos tipos en una sola
+tabla. El árbol sintáctico se dibuja como imagen (`arbol.py`, con matplotlib);
+también se puede ver como texto desde un desplegable. El tema oscuro se define
+en `.streamlit/config.toml`.
 
 ```bash
 streamlit run app.py

@@ -47,7 +47,8 @@ class ResultadoAnalisis:
     nombre: str
     errores: list[FilaError] = field(default_factory=list)
     tokens: list[Token] = field(default_factory=list)
-    arbol: str = ""
+    arbol: str = ""                    # Árbol como texto (notación con paréntesis).
+    arbol_estructura: list = None      # [texto, [hijos]] para dibujarlo como imagen.
 
     @property
     def es_valido(self) -> bool:
@@ -81,4 +82,20 @@ def analizar_codigo(nombre: str, codigo: str) -> ResultadoAnalisis:
         errores=errores,
         tokens=lexico.tokens,
         arbol=arbol,
+        arbol_estructura=_estructura_arbol(sintactico.arbol),
     )
+
+
+def _estructura_arbol(nodo) -> list:
+    """Convierte el árbol ANTLR en [texto, [hijos]] para poder dibujarlo.
+
+    Las hojas son los tokens (su texto) y los nodos internos llevan el nombre
+    de la regla gramatical que representan.
+    """
+    if nodo is None:
+        return []
+    if nodo.getChildCount() == 0:
+        texto = nodo.getText()
+        return [texto if texto else "<vacío>", []]
+    texto = CompiscriptParser.ruleNames[nodo.getRuleIndex()]
+    return [texto, [_estructura_arbol(hijo) for hijo in nodo.getChildren()]]
